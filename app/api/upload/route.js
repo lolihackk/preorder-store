@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import path from "path";
 import fs from "fs";
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+import path from "path";
 const { COOKIE_NAME, verifySessionToken } = require("@/lib/auth");
 
 function isAdmin() {
@@ -9,7 +9,9 @@ function isAdmin() {
   return !!verifySessionToken(token);
 }
 
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
+// Stored inside the persistent volume (mounted at /app/data on Railway)
+// instead of /public/uploads, which is wiped on every redeploy.
+const UPLOAD_DIR = path.join(process.cwd(), "data", "uploads");
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 
