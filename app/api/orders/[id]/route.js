@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-const { updateOrderStatus, getOrder } = require("@/lib/orders");
+import { NextResponse } from "next/server";
+const { updateOrderStatus, getOrder, deleteOrder } = require("@/lib/orders");
 const { COOKIE_NAME, verifySessionToken } = require("@/lib/auth");
 
 const VALID_STATUSES = ["pending", "confirmed", "shipped", "delivered", "cancelled"];
@@ -22,4 +22,14 @@ export async function PATCH(request, { params }) {
   }
   const order = updateOrderStatus(params.id, body.status);
   return NextResponse.json({ order });
+}
+
+export async function DELETE(request, { params }) {
+  if (!isAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!getOrder(params.id)) {
+    return NextResponse.json({ error: "Order not found." }, { status: 404 });
+  }
+  deleteOrder(params.id);
+  return NextResponse.json({ success: true });
 }

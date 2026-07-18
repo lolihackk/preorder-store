@@ -1,5 +1,4 @@
 import HiddenAdminTrigger from "@/components/HiddenAdminTrigger";
-import Image from "next/image";
 import Link from "next/link";
 import "./globals.css";
 
@@ -20,20 +19,8 @@ export default function RootLayout({ children }) {
       <body className="bg-cream text-ink font-body antialiased min-h-screen flex flex-col">
         <header className="border-b border-beige-dark bg-cream/95 backdrop-blur sticky top-0 z-40">
           <div className="max-w-6xl mx-auto px-4 sm:px-8 h-16 sm:h-20 flex items-center justify-between">
-            <Link
-              href="/"
-              className="group flex items-center gap-3 max-w-[70%]"
-            >
-              <span className="relative shrink-0 rounded-xl overflow-hidden shadow-sm ring-1 ring-beige-dark transition-transform duration-300 group-hover:scale-105 group-hover:shadow-md">
-                <Image
-                  src="/logo.png"
-                  alt={shopName}
-                  width={44}
-                  height={44}
-                  className="h-9 w-9 sm:h-11 sm:w-11 object-cover"
-                  priority
-                />
-              </span>
+            <Link href="/" className="flex items-center gap-2 max-w-[70%]">
+              <img src="/logo.png" alt={shopName} className="h-8 sm:h-10 w-auto object-contain" />
               <span className="font-display text-lg sm:text-xl tracking-wide text-ink truncate">
                 {shopName}
               </span>

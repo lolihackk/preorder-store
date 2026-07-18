@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const STATUS_OPTIONS = ["pending", "confirmed", "shipped", "delivered", "cancelled"];
 
@@ -16,6 +16,15 @@ export default function OrdersTable({ initialOrders }) {
   const [orders, setOrders] = useState(initialOrders);
   const [filter, setFilter] = useState("all");
   const [updating, setUpdating] = useState(null);
+  const [toasts, setToasts] = useState([]);
+
+  const showToast = useCallback((message, type = "success") => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 3000);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -41,7 +50,30 @@ export default function OrdersTable({ initialOrders }) {
       });
       if (res.ok) {
         setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
+        showToast(`Order status updated to "${status}".`, "success");
+      } else {
+        showToast("Could not update order status.", "error");
       }
+    } catch {
+      showToast("Network error while updating status.", "error");
+    } finally {
+      setUpdating(null);
+    }
+  }
+
+  async function removeOrder(id) {
+    if (!confirm("Delete this order permanently? This cannot be undone.")) return;
+    setUpdating(id);
+    try {
+      const res = await fetch(`/api/orders/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setOrders((prev) => prev.filter((o) => o.id !== id));
+        showToast("Order deleted.", "success");
+      } else {
+        showToast("Could not delete order.", "error");
+      }
+    } catch {
+      showToast("Network error while deleting order.", "error");
     } finally {
       setUpdating(null);
     }
@@ -51,6 +83,8 @@ export default function OrdersTable({ initialOrders }) {
 
   return (
     <div>
+      <ToastStack toasts={toasts} />
+
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
           All ({orders.length})
@@ -73,12 +107,13 @@ export default function OrdersTable({ initialOrders }) {
               <th className="px-4 py-3">Delivery</th>
               <th className="px-4 py-3">Total</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-ink-soft">
+                <td colSpan={8} className="px-4 py-8 text-center text-ink-soft">
                   No pre-orders yet.
                 </td>
               </tr>
@@ -121,6 +156,15 @@ export default function OrdersTable({ initialOrders }) {
                     ))}
                   </select>
                 </td>
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => removeOrder(o.id)}
+                    disabled={updating === o.id}
+                    className="text-xs text-red-700 hover:text-red-900 hover:underline disabled:opacity-50"
+                  >
+                    Delete
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -140,5 +184,32 @@ function FilterChip({ active, onClick, children }) {
     >
       {children}
     </button>
+  );
+}
+
+function ToastStack({ toasts }) {
+  if (toasts.length === 0) return null;
+  return (
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 items-end">
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          className={`px-4 py-2.5 rounded-sm text-sm shadow-lg text-white animate-toast-in ${
+            t.type === "error" ? "bg-red-700" : "bg-ink"
+          }`}
+        >
+          {t.message}
+        </div>
+      ))}
+      <style jsx global>{`
+        @keyframes toast-in {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-toast-in {
+          animation: toast-in 0.2s ease-out;
+        }
+      `}</style>
+    </div>
   );
 }
