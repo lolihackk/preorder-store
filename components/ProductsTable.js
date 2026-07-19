@@ -1,9 +1,11 @@
 "use client";
 
-import Image from "next/image";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+
+const LOW_STOCK_THRESHOLD = 5;
 
 export default function ProductsTable({ initialProducts }) {
   const router = useRouter();
@@ -29,6 +31,8 @@ export default function ProductsTable({ initialProducts }) {
   const q = query.trim().toLowerCase();
   const filtered = q ? products.filter((p) => p.name.toLowerCase().includes(q)) : products;
 
+  const lowStockProducts = products.filter((p) => p.stock > 0 && p.stock < LOW_STOCK_THRESHOLD && p.status !== "hidden");
+
   if (products.length === 0) {
     return (
       <div className="border border-beige-dark rounded-sm bg-beige/40 p-10 text-center text-ink-soft">
@@ -39,6 +43,12 @@ export default function ProductsTable({ initialProducts }) {
 
   return (
     <div>
+      {lowStockProducts.length > 0 && (
+        <div className="mb-4 bg-amber-50 border border-amber-300 text-amber-900 rounded-sm px-3 py-2.5 text-sm">
+          <span className="font-medium">Low stock:</span>{" "}
+          {lowStockProducts.map((p) => `${p.name} (${p.stock} left)`).join(", ")}
+        </div>
+      )}
       <input
         type="text"
         value={query}
@@ -66,33 +76,42 @@ export default function ProductsTable({ initialProducts }) {
                 </td>
               </tr>
             )}
-            {filtered.map((p) => (
-            <tr key={p.id} className="border-t border-beige-dark">
-              <td className="px-4 py-3">
-                <div className="relative w-12 h-14 bg-beige rounded-sm overflow-hidden">
-                  {p.images?.[0] && (
-                    <Image src={p.images[0]} alt={p.name} fill sizes="48px" className="object-cover" />
-                  )}
-                </div>
-              </td>
-              <td className="px-4 py-3 text-ink font-medium">{p.name}</td>
-              <td className="px-4 py-3 text-ink-soft">{p.price.toLocaleString()} DA</td>
-              <td className="px-4 py-3 text-ink-soft">{p.stock}</td>
-              <td className="px-4 py-3 text-ink-soft capitalize">{p.status.replace("_", " ")}</td>
-              <td className="px-4 py-3 text-right whitespace-nowrap">
-                <Link href={`/admin/products/${p.id}`} className="text-clay text-sm underline underline-offset-2 mr-4">
-                  Edit
-                </Link>
-                <button
-                  onClick={() => handleDelete(p.id, p.name)}
-                  disabled={deletingId === p.id}
-                  className="text-red-700 text-sm underline underline-offset-2"
-                >
-                  {deletingId === p.id ? "Deleting…" : "Delete"}
-                </button>
-              </td>
-            </tr>
-            ))}
+            {filtered.map((p) => {
+              const isLow = p.stock > 0 && p.stock < LOW_STOCK_THRESHOLD;
+              const isOut = p.stock <= 0;
+              return (
+                <tr key={p.id} className={`border-t border-beige-dark ${isLow ? "bg-amber-50/60" : ""}`}>
+                  <td className="px-4 py-3">
+                    <div className="relative w-12 h-14 bg-beige rounded-sm overflow-hidden">
+                      {p.images?.[0] && (
+                        <Image src={p.images[0]} alt={p.name} fill sizes="48px" className="object-cover" />
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-ink font-medium">{p.name}</td>
+                  <td className="px-4 py-3 text-ink-soft">{p.price.toLocaleString()} DA</td>
+                  <td className="px-4 py-3">
+                    <span className={isOut ? "text-red-700 font-medium" : isLow ? "text-amber-700 font-medium" : "text-ink-soft"}>
+                      {p.stock}
+                    </span>
+                    {isLow && <span className="ml-1.5 text-[10px] uppercase bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-sm">Low</span>}
+                  </td>
+                  <td className="px-4 py-3 text-ink-soft capitalize">{p.status.replace("_", " ")}</td>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <Link href={`/admin/products/${p.id}`} className="text-clay text-sm underline underline-offset-2 mr-4">
+                      Edit
+                    </Link>
+                    <button
+                      onClick={() => handleDelete(p.id, p.name)}
+                      disabled={deletingId === p.id}
+                      className="text-red-700 text-sm underline underline-offset-2"
+                    >
+                      {deletingId === p.id ? "Deleting…" : "Delete"}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

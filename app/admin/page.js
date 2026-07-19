@@ -1,7 +1,8 @@
-import { requireAdmin } from "@/lib/requireAdmin";
-import { listOrders } from "@/lib/orders";
 import AdminNav from "@/components/AdminNav";
 import OrdersTable from "@/components/OrdersTable";
+import SalesChart from "@/components/SalesChart";
+import { listOrders } from "@/lib/orders";
+import { requireAdmin } from "@/lib/requireAdmin";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export default function AdminDashboard() {
       <p className="text-ink-soft text-sm mb-6">
         Every pre-order placed on the store, updated automatically.
       </p>
+      <SalesChart orders={orders} />
       <OrdersTable initialOrders={orders} />
     </div>
   );

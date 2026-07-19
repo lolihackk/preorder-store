@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const STATUS_OPTIONS = ["pending", "confirmed", "shipped", "delivered", "cancelled"];
 
@@ -12,12 +12,42 @@ const STATUS_STYLES = {
   cancelled: "bg-red-100 text-red-700",
 };
 
+// Plays a short two-tone beep using the Web Audio API — no audio file needed.
+function playNotificationSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = ctx.currentTime;
+    [880, 1180].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, now + i * 0.14);
+      gain.gain.exponentialRampToValueAtTime(0.25, now + i * 0.14 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.14 + 0.18);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + i * 0.14);
+      osc.stop(now + i * 0.14 + 0.2);
+    });
+  } catch {
+    // Web Audio not available — fail silently, the toast still shows.
+  }
+}
+
 export default function OrdersTable({ initialOrders }) {
   const [orders, setOrders] = useState(initialOrders);
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [updating, setUpdating] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const [selected, setSelected] = useState(() => new Set());
+  const [bulkStatus, setBulkStatus] = useState("confirmed");
+  const [bulkApplying, setBulkApplying] = useState(false);
+  const [newCount, setNewCount] = useState(0);
+
+  const knownIdsRef = useRef(new Set(initialOrders.map((o) => o.id)));
+  const baseTitleRef = useRef(typeof document !== "undefined" ? document.title : "");
 
   const showToast = useCallback((message, type = "success") => {
     const id = Date.now() + Math.random();
@@ -27,18 +57,48 @@ export default function OrdersTable({ initialOrders }) {
     }, 3000);
   }, []);
 
+  // Poll for new orders. Detect any order ID we haven't seen before, notify.
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
         const res = await fetch("/api/orders");
         if (!res.ok) return;
         const data = await res.json();
+
+        const freshOnes = data.orders.filter((o) => !knownIdsRef.current.has(o.id));
+        if (freshOnes.length > 0) {
+          freshOnes.forEach((o) => knownIdsRef.current.add(o.id));
+          setNewCount((c) => c + freshOnes.length);
+          playNotificationSound();
+          showToast(
+            freshOnes.length === 1
+              ? `New pre-order from ${freshOnes[0].full_name}!`
+              : `${freshOnes.length} new pre-orders just came in!`,
+            "success"
+          );
+        }
         setOrders(data.orders);
       } catch {
         // ignore transient network errors during polling
       }
     }, 8000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Reflect unseen new-order count in the browser tab title.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.title = newCount > 0 ? `(${newCount}) ${baseTitleRef.current}` : baseTitleRef.current;
+  }, [newCount]);
+
+  // Clear the "new" badge once the admin comes back to look at the tab.
+  useEffect(() => {
+    function handleFocus() {
+      setNewCount(0);
+    }
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
   }, []);
 
   async function changeStatus(id, status) {
@@ -69,6 +129,11 @@ export default function OrdersTable({ initialOrders }) {
       const res = await fetch(`/api/orders/${id}`, { method: "DELETE" });
       if (res.ok) {
         setOrders((prev) => prev.filter((o) => o.id !== id));
+        setSelected((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
         showToast("Order deleted.", "success");
       } else {
         showToast("Could not delete order.", "error");
@@ -77,6 +142,54 @@ export default function OrdersTable({ initialOrders }) {
       showToast("Network error while deleting order.", "error");
     } finally {
       setUpdating(null);
+    }
+  }
+
+  function toggleSelect(id) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAllVisible() {
+    setSelected((prev) => {
+      const allVisibleSelected = filtered.length > 0 && filtered.every((o) => prev.has(o.id));
+      if (allVisibleSelected) {
+        const next = new Set(prev);
+        filtered.forEach((o) => next.delete(o.id));
+        return next;
+      }
+      const next = new Set(prev);
+      filtered.forEach((o) => next.add(o.id));
+      return next;
+    });
+  }
+
+  async function applyBulkStatus() {
+    if (selected.size === 0) return;
+    setBulkApplying(true);
+    const ids = Array.from(selected);
+    try {
+      const results = await Promise.all(
+        ids.map((id) =>
+          fetch(`/api/orders/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: bulkStatus }),
+          }).then((res) => ({ id, ok: res.ok }))
+        )
+      );
+      const succeeded = new Set(results.filter((r) => r.ok).map((r) => r.id));
+      setOrders((prev) => prev.map((o) => (succeeded.has(o.id) ? { ...o, status: bulkStatus } : o)));
+      setSelected(new Set());
+      showToast(`${succeeded.size} order(s) updated to "${bulkStatus}".`, "success");
+    } catch {
+      showToast("Network error during bulk update.", "error");
+    } finally {
+      setBulkApplying(false);
     }
   }
 
@@ -94,9 +207,11 @@ export default function OrdersTable({ initialOrders }) {
     : statusFiltered;
 
   const totalRevenue = orders
-  .filter((o) => o.status !== "cancelled")
-  .reduce((sum, o) => sum + o.subtotal, 0);
+    .filter((o) => o.status !== "cancelled")
+    .reduce((sum, o) => sum + o.subtotal, 0);
   const pendingCount = orders.filter((o) => o.status === "pending").length;
+
+  const allVisibleSelected = filtered.length > 0 && filtered.every((o) => selected.has(o.id));
 
   function exportCsv() {
     const headers = [
@@ -161,10 +276,46 @@ export default function OrdersTable({ initialOrders }) {
         ))}
       </div>
 
+      {selected.size > 0 && (
+        <div className="flex items-center gap-2 mb-3 flex-wrap bg-clay/10 border border-clay/30 rounded-sm px-3 py-2">
+          <span className="text-sm text-ink font-medium">{selected.size} selected</span>
+          <select
+            value={bulkStatus}
+            onChange={(e) => setBulkStatus(e.target.value)}
+            className="text-sm border border-beige-dark rounded-sm px-2 py-1 bg-white"
+          >
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s} value={s}>Mark as {s}</option>
+            ))}
+          </select>
+          <button
+            onClick={applyBulkStatus}
+            disabled={bulkApplying}
+            className="btn-primary text-sm px-3 py-1.5 rounded-sm disabled:opacity-60"
+          >
+            {bulkApplying ? "Applying…" : "Apply"}
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="text-sm text-ink-soft underline underline-offset-2"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       <div className="overflow-x-auto border border-beige-dark rounded-sm bg-white">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-beige/60 text-left text-ink-soft text-xs uppercase tracking-wide">
+              <th className="px-3 py-3">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={toggleSelectAllVisible}
+                  aria-label="Select all visible orders"
+                />
+              </th>
               <th className="px-4 py-3">Date</th>
               <th className="px-4 py-3">Customer</th>
               <th className="px-4 py-3">Phone</th>
@@ -178,13 +329,21 @@ export default function OrdersTable({ initialOrders }) {
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-ink-soft">
+                <td colSpan={9} className="px-4 py-8 text-center text-ink-soft">
                   {query ? "No orders match your search." : "No pre-orders yet."}
                 </td>
               </tr>
             )}
             {filtered.map((o) => (
-              <tr key={o.id} className="border-t border-beige-dark align-top">
+              <tr key={o.id} className={`border-t border-beige-dark align-top ${selected.has(o.id) ? "bg-clay/5" : ""}`}>
+                <td className="px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(o.id)}
+                    onChange={() => toggleSelect(o.id)}
+                    aria-label={`Select order #${o.id}`}
+                  />
+                </td>
                 <td className="px-4 py-3 whitespace-nowrap text-ink-soft">
                   {new Date(o.created_at).toLocaleString()}
                 </td>
