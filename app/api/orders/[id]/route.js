@@ -31,5 +31,5 @@ export async function DELETE(request, { params }) {
     return NextResponse.json({ error: "Order not found." }, { status: 404 });
   }
   deleteOrder(params.id);
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ ok: true });
 }

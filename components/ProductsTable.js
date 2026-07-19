@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 export default function ProductsTable({ initialProducts }) {
   const router = useRouter();
   const [products, setProducts] = useState(initialProducts);
   const [deletingId, setDeletingId] = useState(null);
+  const [query, setQuery] = useState("");
 
   async function handleDelete(id, name) {
     if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
@@ -25,6 +26,9 @@ export default function ProductsTable({ initialProducts }) {
     }
   }
 
+  const q = query.trim().toLowerCase();
+  const filtered = q ? products.filter((p) => p.name.toLowerCase().includes(q)) : products;
+
   if (products.length === 0) {
     return (
       <div className="border border-beige-dark rounded-sm bg-beige/40 p-10 text-center text-ink-soft">
@@ -34,20 +38,35 @@ export default function ProductsTable({ initialProducts }) {
   }
 
   return (
-    <div className="overflow-x-auto border border-beige-dark rounded-sm bg-white">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-beige/60 text-left text-ink-soft text-xs uppercase tracking-wide">
-            <th className="px-4 py-3">Image</th>
-            <th className="px-4 py-3">Name</th>
-            <th className="px-4 py-3">Price</th>
-            <th className="px-4 py-3">Stock</th>
-            <th className="px-4 py-3">Status</th>
-            <th className="px-4 py-3"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {products.map((p) => (
+    <div>
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search products by name…"
+        className="w-full bg-white border border-beige-dark rounded-sm px-3 py-2 text-sm mb-4"
+      />
+      <div className="overflow-x-auto border border-beige-dark rounded-sm bg-white">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-beige/60 text-left text-ink-soft text-xs uppercase tracking-wide">
+              <th className="px-4 py-3">Image</th>
+              <th className="px-4 py-3">Name</th>
+              <th className="px-4 py-3">Price</th>
+              <th className="px-4 py-3">Stock</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-ink-soft">
+                  No products match your search.
+                </td>
+              </tr>
+            )}
+            {filtered.map((p) => (
             <tr key={p.id} className="border-t border-beige-dark">
               <td className="px-4 py-3">
                 <div className="relative w-12 h-14 bg-beige rounded-sm overflow-hidden">
@@ -73,9 +92,10 @@ export default function ProductsTable({ initialProducts }) {
                 </button>
               </td>
             </tr>
-          ))}
-        </tbody>
-      </table>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -15,6 +15,7 @@ const STATUS_STYLES = {
 export default function OrdersTable({ initialOrders }) {
   const [orders, setOrders] = useState(initialOrders);
   const [filter, setFilter] = useState("all");
+  const [query, setQuery] = useState("");
   const [updating, setUpdating] = useState(null);
   const [toasts, setToasts] = useState([]);
 
@@ -79,11 +80,75 @@ export default function OrdersTable({ initialOrders }) {
     }
   }
 
-  const filtered = filter === "all" ? orders : orders.filter((o) => o.status === filter);
+  const statusFiltered = filter === "all" ? orders : orders.filter((o) => o.status === filter);
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? statusFiltered.filter((o) => {
+        const haystack = [
+          o.full_name, o.phone1, o.phone2, o.product_name,
+          o.wilaya, o.commune, String(o.id),
+        ].filter(Boolean).join(" ").toLowerCase();
+        return haystack.includes(q);
+      })
+    : statusFiltered;
+
+  const totalRevenue = orders
+  .filter((o) => o.status !== "cancelled")
+  .reduce((sum, o) => sum + o.subtotal, 0);
+  const pendingCount = orders.filter((o) => o.status === "pending").length;
+
+  function exportCsv() {
+    const headers = [
+      "id", "date", "customer", "phone1", "phone2", "product", "size", "color",
+      "quantity", "wilaya", "commune", "delivery_type", "shipping_cost",
+      "subtotal", "total_price", "status",
+    ];
+    const rows = filtered.map((o) => [
+      o.id, o.created_at, o.full_name, o.phone1, o.phone2 || "", o.product_name,
+      o.size || "", o.color || "", o.quantity, o.wilaya, o.commune, o.delivery_type,
+      o.shipping_cost, o.subtotal, o.total_price, o.status,
+    ]);
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `orders-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div>
       <ToastStack toasts={toasts} />
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        <StatCard label="Total orders" value={orders.length} />
+        <StatCard label="Pending" value={pendingCount} />
+        <StatCard label="Revenue" value={`${totalRevenue.toLocaleString()} DA`} />
+        <StatCard label="Showing" value={filtered.length} />
+      </div>
+
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by name, phone, product, wilaya…"
+          className="flex-1 min-w-[200px] bg-white border border-beige-dark rounded-sm px-3 py-2 text-sm"
+        />
+        <button
+          onClick={exportCsv}
+          className="text-xs px-3 py-2 border border-beige-dark rounded-sm text-ink-soft hover:border-clay hover:text-ink whitespace-nowrap"
+        >
+          Export CSV
+        </button>
+      </div>
 
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
@@ -114,7 +179,7 @@ export default function OrdersTable({ initialOrders }) {
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-ink-soft">
-                  No pre-orders yet.
+                  {query ? "No orders match your search." : "No pre-orders yet."}
                 </td>
               </tr>
             )}
@@ -170,6 +235,15 @@ export default function OrdersTable({ initialOrders }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value }) {
+  return (
+    <div className="bg-white border border-beige-dark rounded-sm px-3 py-2.5">
+      <div className="text-[10px] uppercase tracking-wide text-ink-soft">{label}</div>
+      <div className="text-lg font-medium text-ink mt-0.5">{value}</div>
     </div>
   );
 }
