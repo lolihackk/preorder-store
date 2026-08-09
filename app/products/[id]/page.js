@@ -1,4 +1,4 @@
-import PreorderForm from "@/components/PreorderForm";
+import ProductBasketForm from "@/components/ProductBasketForm";
 import { getProduct } from "@/lib/products";
 import Image from "next/image";
 import { notFound } from "next/navigation";
@@ -55,7 +55,7 @@ export default function ProductPage({ params }) {
 
           <hr className="border-beige-dark my-6" />
 
-          <PreorderForm product={product} />
+          <ProductBasketForm product={product} />
         </div>
       </div>
     </div>

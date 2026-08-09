@@ -12,7 +12,6 @@ const STATUS_STYLES = {
   cancelled: "bg-red-100 text-red-700",
 };
 
-// Plays a short two-tone beep using the Web Audio API — no audio file needed.
 function playNotificationSound() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -35,6 +34,13 @@ function playNotificationSound() {
   }
 }
 
+// Short "3 items" style summary shown in the collapsed row.
+function itemsSummary(items) {
+  if (!items || items.length === 0) return "—";
+  if (items.length === 1) return items[0].product_name;
+  return `${items.length} items`;
+}
+
 export default function OrdersTable({ initialOrders }) {
   const [orders, setOrders] = useState(initialOrders);
   const [filter, setFilter] = useState("all");
@@ -45,6 +51,7 @@ export default function OrdersTable({ initialOrders }) {
   const [bulkStatus, setBulkStatus] = useState("confirmed");
   const [bulkApplying, setBulkApplying] = useState(false);
   const [newCount, setNewCount] = useState(0);
+  const [expanded, setExpanded] = useState(() => new Set());
 
   const knownIdsRef = useRef(new Set(initialOrders.map((o) => o.id)));
   const baseTitleRef = useRef(typeof document !== "undefined" ? document.title : "");
@@ -57,7 +64,6 @@ export default function OrdersTable({ initialOrders }) {
     }, 3000);
   }, []);
 
-  // Poll for new orders. Detect any order ID we haven't seen before, notify.
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
@@ -86,13 +92,11 @@ export default function OrdersTable({ initialOrders }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reflect unseen new-order count in the browser tab title.
   useEffect(() => {
     if (typeof document === "undefined") return;
     document.title = newCount > 0 ? `(${newCount}) ${baseTitleRef.current}` : baseTitleRef.current;
   }, [newCount]);
 
-  // Clear the "new" badge once the admin comes back to look at the tab.
   useEffect(() => {
     function handleFocus() {
       setNewCount(0);
@@ -100,6 +104,15 @@ export default function OrdersTable({ initialOrders }) {
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
   }, []);
+
+  function toggleExpanded(id) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   async function changeStatus(id, status) {
     setUpdating(id);
@@ -198,8 +211,9 @@ export default function OrdersTable({ initialOrders }) {
   const q = query.trim().toLowerCase();
   const filtered = q
     ? statusFiltered.filter((o) => {
+        const itemNames = (o.items || []).map((i) => i.product_name).join(" ");
         const haystack = [
-          o.full_name, o.phone1, o.phone2, o.product_name,
+          o.full_name, o.phone1, o.phone2, itemNames,
           o.wilaya, o.commune, String(o.id),
         ].filter(Boolean).join(" ").toLowerCase();
         return haystack.includes(q);
@@ -215,13 +229,16 @@ export default function OrdersTable({ initialOrders }) {
 
   function exportCsv() {
     const headers = [
-      "id", "date", "customer", "phone1", "phone2", "product", "size", "color",
-      "quantity", "wilaya", "commune", "delivery_type", "shipping_cost",
+      "id", "date", "customer", "phone1", "phone2", "items",
+      "wilaya", "commune", "delivery_type", "shipping_cost",
       "subtotal", "total_price", "status",
     ];
     const rows = filtered.map((o) => [
-      o.id, o.created_at, o.full_name, o.phone1, o.phone2 || "", o.product_name,
-      o.size || "", o.color || "", o.quantity, o.wilaya, o.commune, o.delivery_type,
+      o.id, o.created_at, o.full_name, o.phone1, o.phone2 || "",
+      (o.items || [])
+        .map((i) => `${i.product_name} (${[i.size, i.color].filter(Boolean).join("/")} x${i.quantity})`)
+        .join("; "),
+      o.wilaya, o.commune, o.delivery_type,
       o.shipping_cost, o.subtotal, o.total_price, o.status,
     ]);
     const csv = [headers, ...rows]
@@ -319,7 +336,7 @@ export default function OrdersTable({ initialOrders }) {
               <th className="px-4 py-3">Date</th>
               <th className="px-4 py-3">Customer</th>
               <th className="px-4 py-3">Phone</th>
-              <th className="px-4 py-3">Product</th>
+              <th className="px-4 py-3">Items</th>
               <th className="px-4 py-3">Delivery</th>
               <th className="px-4 py-3">Total</th>
               <th className="px-4 py-3">Status</th>
@@ -334,63 +351,93 @@ export default function OrdersTable({ initialOrders }) {
                 </td>
               </tr>
             )}
-            {filtered.map((o) => (
-              <tr key={o.id} className={`border-t border-beige-dark align-top ${selected.has(o.id) ? "bg-clay/5" : ""}`}>
-                <td className="px-3 py-3">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(o.id)}
-                    onChange={() => toggleSelect(o.id)}
-                    aria-label={`Select order #${o.id}`}
-                  />
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap text-ink-soft">
-                  {new Date(o.created_at).toLocaleString()}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="font-medium text-ink">{o.full_name}</div>
-                  <div className="text-ink-soft text-xs">{o.commune}, {o.wilaya}</div>
-                </td>
-                <td className="px-4 py-3 text-ink-soft whitespace-nowrap">
-                  <div>{o.phone1}</div>
-                  {o.phone2 && <div>{o.phone2}</div>}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="text-ink">{o.product_name}</div>
-                  <div className="text-ink-soft text-xs">
-                    {[o.size, o.color].filter(Boolean).join(" / ") || "—"} · Qty {o.quantity}
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-ink-soft whitespace-nowrap">
-                  {o.delivery_type === "home" ? "Home Delivery" : "Stop Desk"}
-                  <div className="text-xs">{o.shipping_cost.toLocaleString()} DA</div>
-                </td>
-                <td className="px-4 py-3 font-medium text-ink whitespace-nowrap">
-                  {o.total_price.toLocaleString()} DA
-                </td>
-                <td className="px-4 py-3">
-                  <select
-                    value={o.status}
-                    disabled={updating === o.id}
-                    onChange={(e) => changeStatus(o.id, e.target.value)}
-                    className={`text-xs px-2 py-1 rounded-sm border-0 ${STATUS_STYLES[o.status]}`}
-                  >
-                    {STATUS_OPTIONS.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </td>
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => removeOrder(o.id)}
-                    disabled={updating === o.id}
-                    className="text-xs text-red-700 hover:text-red-900 hover:underline disabled:opacity-50"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {filtered.map((o) => {
+              const isExpanded = expanded.has(o.id);
+              const items = o.items || [];
+              return (
+                <>
+                  <tr key={o.id} className={`border-t border-beige-dark align-top ${selected.has(o.id) ? "bg-clay/5" : ""}`}>
+                    <td className="px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(o.id)}
+                        onChange={() => toggleSelect(o.id)}
+                        aria-label={`Select order #${o.id}`}
+                      />
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-ink-soft">
+                      {new Date(o.created_at).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-ink">{o.full_name}</div>
+                      <div className="text-ink-soft text-xs">{o.commune}, {o.wilaya}</div>
+                    </td>
+                    <td className="px-4 py-3 text-ink-soft whitespace-nowrap">
+                      <div>{o.phone1}</div>
+                      {o.phone2 && <div>{o.phone2}</div>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => toggleExpanded(o.id)}
+                        className="text-ink hover:underline underline-offset-2 text-left"
+                      >
+                        {itemsSummary(items)} {items.length > 1 && (isExpanded ? "▲" : "▼")}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-ink-soft whitespace-nowrap">
+                      {o.delivery_type === "home" ? "Home Delivery" : "Stop Desk"}
+                      <div className="text-xs">{o.shipping_cost.toLocaleString()} DA</div>
+                    </td>
+                    <td className="px-4 py-3 font-medium text-ink whitespace-nowrap">
+                      {o.total_price.toLocaleString()} DA
+                    </td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={o.status}
+                        disabled={updating === o.id}
+                        onChange={(e) => changeStatus(o.id, e.target.value)}
+                        className={`text-xs px-2 py-1 rounded-sm border-0 ${STATUS_STYLES[o.status]}`}
+                      >
+                        {STATUS_OPTIONS.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => removeOrder(o.id)}
+                        disabled={updating === o.id}
+                        className="text-xs text-red-700 hover:text-red-900 hover:underline disabled:opacity-50"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                  {isExpanded && items.length > 0 && (
+                    <tr key={`${o.id}-items`} className="bg-beige/30 border-t border-beige-dark">
+                      <td></td>
+                      <td colSpan={8} className="px-4 py-3">
+                        <table className="w-full text-xs">
+                          <tbody>
+                            {items.map((it) => (
+                              <tr key={it.id} className="border-b border-beige-dark/60 last:border-0">
+                                <td className="py-1.5 pr-4 text-ink">{it.product_name}</td>
+                                <td className="py-1.5 pr-4 text-ink-soft">
+                                  {[it.size, it.color].filter(Boolean).join(" / ") || "—"}
+                                </td>
+                                <td className="py-1.5 pr-4 text-ink-soft">Qty {it.quantity}</td>
+                                <td className="py-1.5 text-ink-soft">{it.line_total.toLocaleString()} DA</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              );
+            })}
           </tbody>
         </table>
       </div>
