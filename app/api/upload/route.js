@@ -1,7 +1,6 @@
-import fs from "fs";
+import { put } from "@vercel/blob";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import path from "path";
 const { COOKIE_NAME, verifySessionToken } = require("@/lib/auth");
 
 function isAdmin() {
@@ -9,9 +8,6 @@ function isAdmin() {
   return !!verifySessionToken(token);
 }
 
-// Stored inside the persistent volume (mounted at /app/data on Railway)
-// instead of /public/uploads, which is wiped on every redeploy.
-const UPLOAD_DIR = path.join(process.cwd(), "data", "uploads");
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -31,12 +27,13 @@ export async function POST(request) {
     return NextResponse.json({ error: "Image must be smaller than 5MB." }, { status: 400 });
   }
 
-  if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
   const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
   const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
-  fs.writeFileSync(path.join(UPLOAD_DIR, filename), buffer);
 
-  return NextResponse.json({ url: `/uploads/${filename}` }, { status: 201 });
+  const blob = await put(filename, file, {
+    access: "public",
+    contentType: file.type,
+  });
+
+  return NextResponse.json({ url: blob.url }, { status: 201 });
 }
