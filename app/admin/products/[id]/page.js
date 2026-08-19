@@ -6,9 +6,9 @@ import ProductForm from "@/components/ProductForm";
 
 export const dynamic = "force-dynamic";
 
-export default function EditProductPage({ params }) {
+export default async function EditProductPage({ params }) {
   requireAdmin();
-  const product = getProduct(params.id);
+  const product = await getProduct(params.id);
   if (!product) notFound();
 
   return (

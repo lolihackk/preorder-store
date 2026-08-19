@@ -1,7 +1,7 @@
 "use client";
 
-import { useBasket } from "@/components/BasketContext";
 import { useState } from "react";
+import { useBasket } from "@/components/BasketContext";
 
 export default function ProductBasketForm({ product }) {
   const { addItem } = useBasket();
@@ -13,7 +13,10 @@ export default function ProductBasketForm({ product }) {
   const soldOut = product.stock <= 0;
 
   function handleAdd() {
-    addItem(product, { size: size || null, color: color || null, quantity });
+    const n = parseInt(quantity, 10);
+    const safeQuantity = Math.min(Math.max(1, isNaN(n) ? 1 : n), Math.max(product.stock, 1));
+    addItem(product, { size: size || null, color: color || null, quantity: safeQuantity });
+    setQuantity(safeQuantity);
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);
   }
@@ -56,7 +59,12 @@ export default function ProductBasketForm({ product }) {
           min={1}
           max={Math.max(product.stock, 1)}
           value={quantity}
-          onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
+          onChange={(e) => setQuantity(e.target.value)}
+          onBlur={() => {
+            const n = parseInt(quantity, 10);
+            const clamped = Math.min(Math.max(1, isNaN(n) ? 1 : n), Math.max(product.stock, 1));
+            setQuantity(clamped);
+          }}
           className="input w-24"
           disabled={soldOut}
         />

@@ -11,7 +11,7 @@ function isAdmin() {
 // GET /api/products — public list (used by the storefront + admin table)
 export async function GET() {
   const admin = isAdmin();
-  return NextResponse.json({ products: listProducts({ includeHidden: admin }) });
+  return NextResponse.json({ products: await listProducts({ includeHidden: admin }) });
 }
 
 // POST /api/products — admin only, create a product
@@ -26,6 +26,6 @@ export async function POST(request) {
     return NextResponse.json({ error: "A valid price is required." }, { status: 400 });
   }
 
-  const product = createProduct(body);
+  const product = await createProduct(body);
   return NextResponse.json({ product }, { status: 201 });
 }

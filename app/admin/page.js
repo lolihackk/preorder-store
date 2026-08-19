@@ -6,9 +6,9 @@ import { requireAdmin } from "@/lib/requireAdmin";
 
 export const dynamic = "force-dynamic";
 
-export default function AdminDashboard() {
-  requireAdmin();
-  const orders = listOrders();
+export default async function AdminDashboard() {
+  await requireAdmin();
+  const orders = await listOrders();
 
   return (
     <div className="max-w-6xl mx-auto px-5 sm:px-8 py-10">

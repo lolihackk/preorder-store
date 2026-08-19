@@ -6,9 +6,9 @@ import ProductsTable from "@/components/ProductsTable";
 
 export const dynamic = "force-dynamic";
 
-export default function AdminProductsPage() {
-  requireAdmin();
-  const products = listProducts({ includeHidden: true });
+export default async function AdminProductsPage() {
+  await requireAdmin();
+  const products = await listProducts({ includeHidden: true });
 
   return (
     <div className="max-w-6xl mx-auto px-5 sm:px-8 py-10">

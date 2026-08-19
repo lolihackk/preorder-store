@@ -15,7 +15,7 @@ export async function GET() {
   if (!isAdmin()) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  return NextResponse.json({ orders: listOrders() });
+  return NextResponse.json({ orders: await listOrders() });
 }
 
 // POST /api/orders — public checkout endpoint. Accepts a basket of items.
@@ -40,7 +40,7 @@ export async function POST(request) {
   const resolvedItems = [];
   if (Array.isArray(items)) {
     for (const line of items) {
-      const product = line.productId ? getProduct(line.productId) : null;
+      const product = line.productId ? await getProduct(line.productId) : null;
       if (!product) {
         errors.items = `A product in your basket is no longer available.`;
         continue;
@@ -80,7 +80,7 @@ export async function POST(request) {
   const shippingCost = shipping.cost;
   const total = subtotal + shippingCost;
 
-  const order = createOrder({
+  const order = await createOrder({
     full_name: fullName.trim(),
     phone1: phone1.trim(),
     phone2: phone2 ? phone2.trim() : "",
@@ -95,7 +95,7 @@ export async function POST(request) {
 
   // Decrement stock for every product ordered.
   for (const item of resolvedItems) {
-    decrementStock(item.product_id, item.quantity);
+    await decrementStock(item.product_id, item.quantity);
   }
 
   return NextResponse.json({ order }, { status: 201 });

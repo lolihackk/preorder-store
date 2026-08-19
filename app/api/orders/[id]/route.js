@@ -17,19 +17,19 @@ export async function PATCH(request, { params }) {
   if (!VALID_STATUSES.includes(body.status)) {
     return NextResponse.json({ error: "Invalid status." }, { status: 400 });
   }
-  if (!getOrder(params.id)) {
+  if (!(await getOrder(params.id))) {
     return NextResponse.json({ error: "Order not found." }, { status: 404 });
   }
-  const order = updateOrderStatus(params.id, body.status);
+  const order = await updateOrderStatus(params.id, body.status);
   return NextResponse.json({ order });
 }
 
 export async function DELETE(request, { params }) {
   if (!isAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!getOrder(params.id)) {
+  if (!(await getOrder(params.id))) {
     return NextResponse.json({ error: "Order not found." }, { status: 404 });
   }
-  deleteOrder(params.id);
+  await deleteOrder(params.id);
   return NextResponse.json({ ok: true });
 }
